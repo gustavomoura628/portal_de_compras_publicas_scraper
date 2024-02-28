@@ -11,7 +11,7 @@ This will download all files with the following directory structure:
 ├─`cd_licitacao_0`  
 │  ├─`file_id_0`  
 │  └─`file_id_1`  
-│
+│  
 └─`cd_licitacao_1`  
    └─`file_id_2`  
 
