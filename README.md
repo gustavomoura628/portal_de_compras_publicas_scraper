@@ -19,3 +19,7 @@ files
 
 The file `confirmed_downloads.json` will also be generated, so you can  
 start and stop the script at any time and it will continue from where it left off.  
+
+
+## Screenshots:  
+![](screenshot_0.png)  
