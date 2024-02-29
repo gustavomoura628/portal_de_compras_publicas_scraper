@@ -108,10 +108,14 @@ def format_duration(seconds):
 
 
 for index, row in enumerate(data["rows"]):
-    file_url = row["CONCAT('http://arquivos.portaldecompraspublicas.com.br/v1/download/', al.ID_ARQUIVO)"]
-    file_id = extract_file_id(row["CONCAT('http://arquivos.portaldecompraspublicas.com.br/v1/download/', al.ID_ARQUIVO)"])
     cd_comprador = str(row["cd_comprador"])
     cd_licitacao = str(row["cd_licitacao"])
+    file_url = row["CONCAT('http://arquivos.portaldecompraspublicas.com.br/v1/download/', al.ID_ARQUIVO)"]
+    if file_url == None:
+        print("ERROR: FILE_URL IS NONE FOR cd_licitacao",cd_licitacao,", SKIPPING!")
+        continue
+
+    file_id = extract_file_id(row["CONCAT('http://arquivos.portaldecompraspublicas.com.br/v1/download/', al.ID_ARQUIVO)"])
 
     if confirmed_downloads.check(file_id):
         print(file_id,"has already been downloaded, skipping...")
