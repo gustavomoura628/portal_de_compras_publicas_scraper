@@ -3,6 +3,8 @@ import os
 import json
 import sys
 import time
+import threading
+
 
 class ConfirmedDownloads():
     # self.data dictionary format:
@@ -23,26 +25,31 @@ class ConfirmedDownloads():
         else:
             self.data = {}
 
+        self.lock = threading.RLock()
+
     # save to disk
     def save(self):
-        json_file_path = "confirmed_downloads.json"
-        with open(json_file_path, 'w') as json_file:
-            json.dump(self.data, json_file, indent=4)
+        with self.lock:
+            json_file_path = "confirmed_downloads.json"
+            with open(json_file_path, 'w') as json_file:
+                json.dump(self.data, json_file, indent=4)
 
     # check if file has already been downloaded
     def check(self, file_id):
-        return file_id in self.data
+        with self.lock:
+            return file_id in self.data
 
     # add file to list of donwloaded files
     def add(self, file_id, cd_comprador, cd_licitacao, file_url, file_path, file_size):
-        self.data[file_id] = {}
-        self.data[file_id]["cd_comprador"] = cd_comprador
-        self.data[file_id]["cd_licitacao"] = cd_licitacao
-        self.data[file_id]["file_url"] = file_url
-        self.data[file_id]["file_path"] = file_path
-        self.data[file_id]["file_size"] = file_size
+        with self.lock:
+            self.data[file_id] = {}
+            self.data[file_id]["cd_comprador"] = cd_comprador
+            self.data[file_id]["cd_licitacao"] = cd_licitacao
+            self.data[file_id]["file_url"] = file_url
+            self.data[file_id]["file_path"] = file_path
+            self.data[file_id]["file_size"] = file_size
 
-        self.save()
+            self.save()
 
 
 confirmed_downloads = ConfirmedDownloads()
@@ -50,19 +57,22 @@ confirmed_downloads = ConfirmedDownloads()
 def extract_file_id(file_url):
     return file_url[len('http://arquivos.portaldecompraspublicas.com.br/v1/download/'):]
 
+filesystem_lock = threading.Lock()
+
 def download_file(file_url, file_id, cd_comprador, cd_licitacao):
     print("Downloading file",file_id)
 
-    # Makes sure destination folder exists
-    if not os.path.isdir("files"):
-        os.makedirs("files")
-    if not os.path.isdir("files/"+cd_licitacao):
-        os.makedirs("files/"+cd_licitacao)
+    with filesystem_lock:
+        # Makes sure destination folder exists
+        if not os.path.isdir("files"):
+            os.makedirs("files")
+        if not os.path.isdir("files/"+cd_licitacao):
+            os.makedirs("files/"+cd_licitacao)
 
-    # If file exists and we want to download it again, delete older version
-    file_path = "files/"+cd_licitacao+"/"+file_id
-    if os.path.exists(file_path):
-        os.remove(file_path)
+        # If file exists and we want to download it again, delete older version
+        file_path = "files/"+cd_licitacao+"/"+file_id
+        if os.path.exists(file_path):
+            os.remove(file_path)
 
     # Send an HTTP GET request to the URL
     response = requests.get(file_url)
@@ -95,9 +105,6 @@ print("Table Size:",table_size)
 
 
 
-time_start = time.time()
-number_of_files_downloaded = 0
-ammount_of_new_storage_used = 0
 
 def format_duration(seconds):
     hours = seconds // 3600
@@ -106,33 +113,69 @@ def format_duration(seconds):
     seconds %= 60
     return "{} hours {} minutes {} seconds".format(int(hours), int(minutes), int(seconds))
 
+time_start = time.time()
+number_of_files_downloaded = 0
+number_of_new_files_downloaded = 0
+ammount_of_storage_used = 0
 
-for index, row in enumerate(data["rows"]):
+statistics_lock = threading.Lock()
+
+def process_row(index, row):
+    print("Processing index",index)
+    global number_of_files_downloaded
+    global number_of_new_files_downloaded
+    global ammount_of_storage_used
+
     cd_comprador = str(row["cd_comprador"])
     cd_licitacao = str(row["cd_licitacao"])
     file_url = row["CONCAT('http://arquivos.portaldecompraspublicas.com.br/v1/download/', al.ID_ARQUIVO)"]
     if file_url == None:
         print("ERROR: FILE_URL IS NONE FOR cd_licitacao",cd_licitacao,", SKIPPING!")
-        continue
+        return False
 
     file_id = extract_file_id(row["CONCAT('http://arquivos.portaldecompraspublicas.com.br/v1/download/', al.ID_ARQUIVO)"])
 
     if confirmed_downloads.check(file_id):
         print(file_id,"has already been downloaded, skipping...")
-    else:
-        download_file(file_url, file_id, cd_comprador, cd_licitacao)
         number_of_files_downloaded+=1
-        ammount_of_new_storage_used+=confirmed_downloads.data[file_id]["file_size"]
+        ammount_of_storage_used+=confirmed_downloads.data[file_id]["file_size"]
+        return True
 
-    # calculates and displays statistics about remaining time and storage
-    if number_of_files_downloaded > 0:
-        elapsed_time = time.time() - time_start
-        average_time_per_download = elapsed_time / number_of_files_downloaded
-        remaining_number_of_files_to_download = table_size - index
-        estimated_remaining_time = remaining_number_of_files_to_download * average_time_per_download
-        print("Estimated remaining time =", format_duration(estimated_remaining_time))
-        print("Estimated remaining storage needed =", int(remaining_number_of_files_to_download * (ammount_of_new_storage_used/number_of_files_downloaded) / 2**20), "MBs")
+    download_file(file_url, file_id, cd_comprador, cd_licitacao)
 
-        print("Progress: {:.2f}%, {} out of {}".format((index+1)/table_size*100, index, table_size))
 
-    print()
+    with statistics_lock:
+        number_of_files_downloaded+=1
+        number_of_new_files_downloaded+=1
+        ammount_of_storage_used+=confirmed_downloads.data[file_id]["file_size"]
+
+        # calculates and displays statistics about remaining time and storage
+        if number_of_new_files_downloaded > 0:
+            elapsed_time = time.time() - time_start
+            average_time_per_download = elapsed_time / number_of_new_files_downloaded
+            remaining_number_of_files_to_download = table_size - number_of_files_downloaded
+            estimated_remaining_time = remaining_number_of_files_to_download * average_time_per_download
+            print("Estimated remaining time =", format_duration(estimated_remaining_time))
+            print("Ammount of storage used =", int(ammount_of_storage_used / 10**6), "MBs")
+            print("Estimated remaining storage needed =", int(remaining_number_of_files_to_download * (ammount_of_storage_used/number_of_files_downloaded) / 10**6), "MBs")
+
+            print("Progress: {:.2f}%, {} out of {}".format((number_of_files_downloaded)/table_size*100, number_of_files_downloaded, table_size))
+
+        print()
+
+    return True
+
+
+threads = []
+for index, row in enumerate(data["rows"]):
+    max_number_of_concurrent_threads = 100
+    while len(threads) >= max_number_of_concurrent_threads:
+        for t in threads[:]: # Iterate over a copy of the list, because we will be changing it inside the loop
+            if not t.is_alive():
+                t.join()
+                threads.remove(t)
+
+    t = threading.Thread(target=process_row,args=(index, row))
+    threads.append(t)
+    t.start()
+
