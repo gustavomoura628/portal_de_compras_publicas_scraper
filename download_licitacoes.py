@@ -17,6 +17,12 @@ class ConfirmedDownloads():
     # retrieve from disk if there is already a confirmed_downloads file
     def __init__(self):
         json_file_path = "confirmed_downloads.json"
+        json_backup_file_path = "confirmed_downloads_backup.json"
+
+        if os.path.exists(json_backup_file_path) and os.path.exists(json_file_path):
+            if os.path.getsize(json_backup_file_path) > os.path.getsize(json_file_path):
+                json_file_path = json_backup_file_path
+
         if os.path.exists(json_file_path):
             with open(json_file_path) as json_file:
                 self.data = json.load(json_file)
@@ -25,9 +31,22 @@ class ConfirmedDownloads():
 
     # save to disk
     def save(self):
+        self.backup()
         json_file_path = "confirmed_downloads.json"
         with open(json_file_path, 'w') as json_file:
             json.dump(self.data, json_file, indent=4)
+
+    # backup file
+    def backup(self):
+        # Source and destination file paths
+        source_file = 'confirmed_downloads.json'
+        destination_file = 'confirmed_downloads_backup.json'
+
+        # Open the source file in binary mode
+        with open(source_file, 'rb') as src_file:
+            # Open the destination file in binary mode and write the contents of the source file to it
+            with open(destination_file, 'wb') as dest_file:
+                dest_file.write(src_file.read())
 
     # check if file has already been downloaded
     def check(self, file_id):
@@ -42,7 +61,9 @@ class ConfirmedDownloads():
         self.data[file_id]["file_path"] = file_path
         self.data[file_id]["file_size"] = file_size
 
+        print("Started saving to confirmed_downloads")
         self.save()
+        print("Finished saving to confirmed_downloads")
 
 
 confirmed_downloads = ConfirmedDownloads()
