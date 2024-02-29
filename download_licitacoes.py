@@ -159,7 +159,7 @@ def process_row(index, row):
             print("Ammount of storage used =", int(ammount_of_storage_used / 10**6), "MBs")
             print("Estimated remaining storage needed =", int(remaining_number_of_files_to_download * (ammount_of_storage_used/number_of_files_downloaded) / 10**6), "MBs")
 
-            print("Progress: {:.2f}%, {} out of {}".format((number_of_files_downloaded)/table_size*100, number_of_files_downloaded, table_size))
+            print("Progress: {:.2f}%, {} out of {}".format((index+1)/table_size*100, index+1, table_size))
 
         print()
 
@@ -168,7 +168,7 @@ def process_row(index, row):
 
 threads = []
 for index, row in enumerate(data["rows"]):
-    max_number_of_concurrent_threads = 100
+    max_number_of_concurrent_threads = 15
     while len(threads) >= max_number_of_concurrent_threads:
         for t in threads[:]: # Iterate over a copy of the list, because we will be changing it inside the loop
             if not t.is_alive():
