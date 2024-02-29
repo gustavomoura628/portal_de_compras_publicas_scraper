@@ -42,6 +42,10 @@ class ConfirmedDownloads():
         source_file = 'confirmed_downloads.json'
         destination_file = 'confirmed_downloads_backup.json'
 
+        # If source doesnt exist, there is nothing to backup
+        if not os.path.exists(source_file):
+            return 0
+
         # Open the source file in binary mode
         with open(source_file, 'rb') as src_file:
             # Open the destination file in binary mode and write the contents of the source file to it
@@ -80,13 +84,35 @@ def download_file(file_url, file_id, cd_comprador, cd_licitacao):
     if not os.path.isdir("files/"+cd_licitacao):
         os.makedirs("files/"+cd_licitacao)
 
-    # If file exists and we want to download it again, delete older version
     file_path = "files/"+cd_licitacao+"/"+file_id
-    if os.path.exists(file_path):
-        os.remove(file_path)
 
     # Send an HTTP GET request to the URL
-    response = requests.get(file_url)
+    response = requests.head(file_url)
+
+    chronometer = time.time()
+    # Send an HTTP GET request to the URL
+    response = requests.get(file_url, stream=True)
+    print("REQUEST GET STREAM:")
+    content_length = int(response.headers['Content-length'])
+    print("Content-Length: ",content_length)
+    print("Chronometer without reading content = ",time.time() - chronometer)
+
+    file_size = None
+    if os.path.exists(file_path):
+        print("FILE ALREADY EXISTS!")
+        file_size = os.path.getsize(file_path)
+        if file_size == content_length:
+            print("Already downloaded, but not in the confirmed_downloads.json file!, skipping download and adding")
+            confirmed_downloads.add(file_id, cd_comprador, cd_licitacao, file_url, file_path, file_size)
+            return True
+        else:
+            print("FILE EXISTS BUT DOES NOT MATCH EXPECTED SIZE")
+            print("EXPECTED",content_length,"FOUND",file_size)
+
+    #print("content len",len(response.content))
+    #print("Chronometer reading content = ",time.time() - chronometer)
+
+
 
     # Check if the request was successful (status code 200)
     if response.status_code == 200:
@@ -97,7 +123,10 @@ def download_file(file_url, file_id, cd_comprador, cd_licitacao):
         print("Failed to download file:", response.status_code)
         return False
 
+    print("Chronometer reading and writing content = ",time.time() - chronometer)
+
     file_size = os.path.getsize(file_path)
+    print("FILE SIZE = ",file_size)
 
     confirmed_downloads.add(file_id, cd_comprador, cd_licitacao, file_url, file_path, file_size)
     return True
