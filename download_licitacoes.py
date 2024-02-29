@@ -166,6 +166,21 @@ def process_row(index, row):
     return True
 
 
+import signal
+
+# Flag to indicate if the program should stop
+stop_flag = False
+
+# Signal handler function to catch Ctrl+C
+def signal_handler(sig, frame):
+    print("Received sig",sig,", frame",frame)
+    global stop_flag
+    print("Stopping the program gracefully...")
+    stop_flag = True
+
+# Set up the signal handler for SIGINT (Ctrl+C)
+signal.signal(signal.SIGINT, signal_handler)
+
 threads = []
 for index, row in enumerate(data["rows"]):
     max_number_of_concurrent_threads = 15
@@ -174,6 +189,13 @@ for index, row in enumerate(data["rows"]):
             if not t.is_alive():
                 t.join()
                 threads.remove(t)
+    if stop_flag:
+        print("Getting the confirmed_downloads lock so it doesnt get corrupted")
+        print("The files will be corrupted! But it's fine, you just have to run the program again until there are no more files to download")
+        print("Either that or check if the file is in confirmed_downloads.json")
+        with confirmed_downloads.lock:
+            print("Forcefully exiting...")
+            os._exit(1)
 
     t = threading.Thread(target=process_row,args=(index, row))
     threads.append(t)
