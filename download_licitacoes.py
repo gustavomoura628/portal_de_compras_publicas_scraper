@@ -49,9 +49,6 @@ class ConfirmedDownloads():
             self.data[file_id]["file_path"] = file_path
             self.data[file_id]["file_size"] = file_size
 
-            self.save()
-
-
 confirmed_downloads = ConfirmedDownloads()
 
 def extract_file_id(file_url):
@@ -182,6 +179,8 @@ def signal_handler(sig, frame):
 signal.signal(signal.SIGINT, signal_handler)
 
 threads = []
+
+last_save = time.time()
 for index, row in enumerate(data["rows"]):
     max_number_of_concurrent_threads = 15
     while len(threads) >= max_number_of_concurrent_threads:
@@ -189,11 +188,18 @@ for index, row in enumerate(data["rows"]):
             if not t.is_alive():
                 t.join()
                 threads.remove(t)
+
+    # Saves progress every 5 minutes
+    if time.time() - last_save > 5*60:
+        confirmed_downloads.save()
+        last_save = time.time()
+
     if stop_flag:
         print("Getting the confirmed_downloads lock so it doesnt get corrupted")
         print("The files will be corrupted! But it's fine, you just have to run the program again until there are no more files to download")
         print("Either that or check if the file is in confirmed_downloads.json")
         with confirmed_downloads.lock:
+            confirmed_downloads.save()
             print("Forcefully exiting...")
             os._exit(1)
 
